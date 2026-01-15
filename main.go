@@ -42,7 +42,25 @@ func main() {
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
+
+	allowOrigins := []string{"http://localhost:3000"}
+	if url := os.Getenv("FRONTEND_URL"); url != "" {
+		allowOrigins = append(allowOrigins, url)
+	}
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: allowOrigins,
+		AllowMethods: []string{
+			http.MethodGet,
+			http.MethodPut,
+			http.MethodPost,
+			http.MethodDelete,
+		},
+		AllowHeaders: []string{
+			echo.HeaderOrigin,
+			echo.HeaderContentType,
+			echo.HeaderAccept,
+		},
+	}))
 
 	// リクエストごとにdbとr2をコンテキストにセットする(すべてのエンドポイントのリクエスト前に実行される)
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
