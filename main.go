@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/fami-gb/video-app-be/db"
@@ -82,8 +83,13 @@ func main() {
 
 		db := c.Get("db").(*gorm.DB)
 
-		// 後で環境変数にする
-		publicDomain := "https://pub-09a5104da7a94497a2707dc0132b1af4.r2.dev"
+		// 環境変数からPublic Domainを取得
+		publicDomain := os.Getenv("PUBLIC_DOMAIN")
+		if publicDomain == "" {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "Public domain configuration missing",
+			})
+		}
 
 		// 保存データ作成
 		video := Video{
