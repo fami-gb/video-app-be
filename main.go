@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/fami-gb/video-app-be/db"
@@ -16,15 +17,17 @@ import (
 // ビデオの付加情報としてタグなども追加できるようにしたい
 type Video struct {
 	gorm.Model
-	Title    string `json:"title"`
-	URL      string `json:"url"`
-	VideoKey string `json:"video_key"`
+	Title    string   `json:"title"`
+	URL      string   `json:"url"`
+	VideoKey string   `json:"video_key"`
+	Tags     []string `json:"tags" gorm:"type:text[]"`
 }
 
 // フロントからの動画登録リクエスト用構造体
 type CreateVideoRequest struct {
-	Title    string `json:"title"`
-	VideoKey string `json:"video_key"`
+	Title    string   `json:"title"`
+	VideoKey string   `json:"video_key"`
+	Tags     []string `json:"tags"`
 }
 
 func main() {
@@ -81,11 +84,23 @@ func main() {
 	// とりま/apiでまとめておく
 	api := e.Group("/api")
 
-	// 全ビデオ取得
+	// 全ビデオ取得（タグフィルタリング対応）
 	api.GET("/videos", func(c echo.Context) error {
 		db := c.Get("db").(*gorm.DB)
 		var videos []Video
-		db.Find(&videos) // SELECT * FROM videos;
+		
+		// タグフィルタパラメータを取得
+		tag := strings.TrimSpace(c.QueryParam("tag"))
+		
+		if tag != "" {
+			// タグでフィルタリング (PostgreSQLの配列検索)
+			// GORMのプレースホルダーを使用してSQLインジェクション対策
+			db.Where("? = ANY(tags)", tag).Find(&videos)
+		} else {
+			// 全件取得
+			db.Find(&videos)
+		}
+		
 		return c.JSON(http.StatusOK, videos)
 	})
 
@@ -109,11 +124,21 @@ func main() {
 			})
 		}
 
+		// タグのバリデーション: 空文字列を除去、トリム
+		validTags := make([]string, 0)
+		for _, tag := range input.Tags {
+			trimmed := strings.TrimSpace(tag)
+			if trimmed != "" {
+				validTags = append(validTags, trimmed)
+			}
+		}
+
 		// 保存データ作成
 		video := Video{
 			Title:    input.Title,
 			URL:      fmt.Sprintf("%s/%s", publicDomain, input.VideoKey),
 			VideoKey: input.VideoKey,
+			Tags:     validTags, // バリデーション済みタグを保存
 		}
 
 		// dbにCreateあったっけ？
