@@ -1,0 +1,34 @@
+# --- 1. ビルド用ステージ (ここだけ重い) ---
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /app
+
+# 依存関係のキャッシュを活用
+COPY go.mod go.sum ./
+RUN go mod download
+
+# ソースコードをコピー
+COPY . .
+
+# バイナリのビルド
+# -w -s: デバッグ情報を削除してサイズ削減
+# CGO_ENABLED=0: 依存関係を減らして軽量化
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main .
+
+
+# --- 2. 実行用ステージ (超軽量・ここがデプロイされる) ---
+FROM alpine:latest
+
+WORKDIR /root/
+
+# SSL証明書を入れる (これがないとR2やDBへのHTTPS接続でエラーになる)
+RUN apk --no-cache add ca-certificates
+
+# ビルド用ステージから、完成したバイナリファイルだけを持ってくる
+COPY --from=builder /app/main .
+
+# ポート公開
+EXPOSE 8080
+
+# 実行
+CMD ["./main"]
