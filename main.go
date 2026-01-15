@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/fami-gb/video-app-be/db"
@@ -89,10 +90,11 @@ func main() {
 		var videos []Video
 		
 		// タグフィルタパラメータを取得
-		tag := c.QueryParam("tag")
+		tag := strings.TrimSpace(c.QueryParam("tag"))
 		
 		if tag != "" {
 			// タグでフィルタリング (PostgreSQLの配列検索)
+			// GORMのプレースホルダーを使用してSQLインジェクション対策
 			db.Where("? = ANY(tags)", tag).Find(&videos)
 		} else {
 			// 全件取得
@@ -122,12 +124,21 @@ func main() {
 			})
 		}
 
+		// タグのバリデーション: 空文字列を除去、トリム
+		validTags := make([]string, 0)
+		for _, tag := range input.Tags {
+			trimmed := strings.TrimSpace(tag)
+			if trimmed != "" {
+				validTags = append(validTags, trimmed)
+			}
+		}
+
 		// 保存データ作成
 		video := Video{
 			Title:    input.Title,
 			URL:      fmt.Sprintf("%s/%s", publicDomain, input.VideoKey),
 			VideoKey: input.VideoKey,
-			Tags:     input.Tags, // タグを保存
+			Tags:     validTags, // バリデーション済みタグを保存
 		}
 
 		// dbにCreateあったっけ？
