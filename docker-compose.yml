@@ -1,0 +1,37 @@
+services:
+  #Go Backend App
+  app:
+    container_name: go-Backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+    - "8080:8080"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=videodb
+      - POSTGRES_HOST=db
+    depends_on:
+      - db
+    tty: true
+
+  #Database(PostgreSQL)
+  db:
+    container_name: go-db
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=videodb
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:
