@@ -19,12 +19,27 @@ type Video struct {
 	Title    string `json:"title"`
 	URL      string `json:"url"`
 	VideoKey string `json:"video_key"`
+	Size     int64  `json:"size"` // ファイルサイズ（バイト）
 }
 
 // フロントからの動画登録リクエスト用構造体
 type CreateVideoRequest struct {
 	Title    string `json:"title"`
 	VideoKey string `json:"video_key"`
+	Size     int64  `json:"size"` // ファイルサイズ（バイト）
+}
+
+// 定数定義
+const (
+	MaxUploadSize  = 1 * 1024 * 1024 * 1024               // 1GB
+	MaxStorageSize = 9*1024*1024*1024 + 512*1024*1024 // 9.5GB
+)
+
+// 現在のストレージ使用量を計算する
+func getTotalStorageUsage(db *gorm.DB) (int64, error) {
+	var totalSize int64
+	err := db.Model(&Video{}).Select("COALESCE(SUM(size), 0)").Scan(&totalSize).Error
+	return totalSize, err
 }
 
 func main() {
@@ -114,6 +129,7 @@ func main() {
 			Title:    input.Title,
 			URL:      fmt.Sprintf("%s/%s", publicDomain, input.VideoKey),
 			VideoKey: input.VideoKey,
+			Size:     input.Size,
 		}
 
 		// dbにCreateあったっけ？
@@ -129,10 +145,40 @@ func main() {
 	api.POST("/upload-url", func(c echo.Context) error {
 		var input struct {
 			Filename string `json:"filename"`
+			Size     int64  `json:"size"` // ファイルサイズ（バイト）
 		}
 		if err := c.Bind(&input); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"error": "Invalid input",
+			})
+		}
+
+		// ファイルサイズのバリデーション：1GBを超えるファイルは拒否
+		if input.Size > MaxUploadSize {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("File size exceeds maximum allowed size of 1GB (%.2f GB requested)", float64(input.Size)/(1024*1024*1024)),
+			})
+		}
+
+		// ストレージ使用量チェック
+		// 注意: 同時アップロードがある場合、この時点でのチェックと実際のDB保存の間に
+		// タイムラグがあるため、完全な制限保証はできません。
+		// より厳密な制御が必要な場合は、DB制約やトランザクションロックの実装を検討してください。
+		db := c.Get("db").(*gorm.DB)
+		totalUsage, err := getTotalStorageUsage(db)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "Failed to check storage usage",
+			})
+		}
+
+		// 新しいファイルを追加すると9.5GBを超える場合は拒否
+		if totalUsage+input.Size > MaxStorageSize {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("Storage limit exceeded. Current usage: %.2f GB, Available: %.2f GB, Requested: %.2f GB",
+					float64(totalUsage)/(1024*1024*1024),
+					float64(MaxStorageSize-totalUsage)/(1024*1024*1024),
+					float64(input.Size)/(1024*1024*1024)),
 			})
 		}
 
