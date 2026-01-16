@@ -31,8 +31,8 @@ type CreateVideoRequest struct {
 
 // 定数定義
 const (
-	MaxUploadSize  = 1 * 1024 * 1024 * 1024   // 1GB
-	MaxStorageSize = 9.5 * 1024 * 1024 * 1024 // 9.5GB
+	MaxUploadSize  = 1 * 1024 * 1024 * 1024               // 1GB
+	MaxStorageSize = 9*1024*1024*1024 + 512*1024*1024 // 9.5GB
 )
 
 // 現在のストレージ使用量を計算する
@@ -161,6 +161,9 @@ func main() {
 		}
 
 		// ストレージ使用量チェック
+		// 注意: 同時アップロードがある場合、この時点でのチェックと実際のDB保存の間に
+		// タイムラグがあるため、完全な制限保証はできません。
+		// より厳密な制御が必要な場合は、DB制約やトランザクションロックの実装を検討してください。
 		db := c.Get("db").(*gorm.DB)
 		totalUsage, err := getTotalStorageUsage(db)
 		if err != nil {
